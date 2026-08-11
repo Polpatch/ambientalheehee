@@ -1,0 +1,20 @@
+import { ScenarioError } from './schema.js';
+export interface AudioInspection { mime: 'audio/wav' | 'audio/mpeg'; durationSeconds: number; }
+const readText = (bytes: Uint8Array, offset: number, value: string) => value.split('').every((c, i) => bytes[offset + i] === c.charCodeAt(0));
+const le16 = (b: Uint8Array, o: number) => b[o]! | b[o + 1]! << 8; const le32 = (b: Uint8Array, o: number) => (b[o]! | b[o + 1]! << 8 | b[o + 2]! << 16 | b[o + 3]! << 24) >>> 0;
+export function inspectEmbeddedAudio(bytes: Uint8Array, mime: 'audio/wav' | 'audio/mpeg'): AudioInspection {
+  const result = mime === 'audio/wav' ? inspectWav(bytes) : inspectMp3(bytes); if (result.mime !== mime) throw new ScenarioError('SOURCE_FORMAT', 'MIME does not match audio signature'); return result;
+}
+function inspectWav(bytes: Uint8Array): AudioInspection {
+  if (bytes.length < 44 || !readText(bytes, 0, 'RIFF') || !readText(bytes, 8, 'WAVE')) throw new ScenarioError('SOURCE_FORMAT', 'Invalid WAV signature');
+  let offset = 12, format: { rate: number; align: number; channels: number; bits: number } | undefined, dataBytes = 0;
+  while (offset + 8 <= bytes.length) { const size = le32(bytes, offset + 4); const end = offset + 8 + size; if (end > bytes.length) throw new ScenarioError('SOURCE_FORMAT', 'Truncated WAV chunk'); if (readText(bytes, offset, 'fmt ') && size >= 16) { const tag = le16(bytes, offset + 8), channels = le16(bytes, offset + 10), rate = le32(bytes, offset + 12), align = le16(bytes, offset + 20), bits = le16(bytes, offset + 22); if (tag !== 1 || channels < 1 || channels > 2 || rate < 8000 || rate > 96000 || ![8, 16, 24, 32].includes(bits) || align !== channels * bits / 8) throw new ScenarioError('SOURCE_FORMAT', 'Unsupported WAV format'); format = { rate, align, channels, bits }; } if (readText(bytes, offset, 'data')) dataBytes += size; offset = end + size % 2; }
+  if (!format || dataBytes === 0 || dataBytes % format.align) throw new ScenarioError('SOURCE_FORMAT', 'Invalid WAV data'); return { mime: 'audio/wav', durationSeconds: dataBytes / format.align / format.rate };
+}
+function inspectMp3(bytes: Uint8Array): AudioInspection {
+  let o = 0; if (readText(bytes, 0, 'ID3')) { if (bytes.length < 10 || bytes.slice(6, 10).some((n) => n & 0x80)) throw new ScenarioError('SOURCE_FORMAT', 'Invalid ID3 header'); o = 10 + ((bytes[6]! << 21) | (bytes[7]! << 14) | (bytes[8]! << 7) | bytes[9]!); }
+  let frames = 0, duration = 0, sampleRate: number | undefined, channels: number | undefined;
+  const rates = [[11025, 12000, 8000], [0, 0, 0], [22050, 24000, 16000], [44100, 48000, 32000]]; const bitrates = { 3: [0,32,40,48,56,64,80,96,112,128,160,192,224,256,320], 2: [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160] };
+  while (o + 4 <= bytes.length && (o + 128 !== bytes.length || !readText(bytes, o, 'TAG'))) { const h = (bytes[o]! << 24) | (bytes[o + 1]! << 16) | (bytes[o + 2]! << 8) | bytes[o + 3]!; if ((h & 0xffe00000) !== 0xffe00000 || ((h >>> 17) & 3) === 1 || ((h >>> 12) & 15) === 0 || ((h >>> 12) & 15) === 15 || ((h >>> 10) & 3) === 3) throw new ScenarioError('SOURCE_FORMAT', 'Invalid MP3 frame'); const version = (h >>> 19) & 3, layer = (h >>> 17) & 3, bitrateIndex = (h >>> 12) & 15, rate = rates[version]![((h >>> 10) & 3)]!, bitrate = bitrates[version === 3 ? 3 : 2]![bitrateIndex]! * 1000, padding = (h >>> 9) & 1, currentChannels = ((h >>> 6) & 3) === 3 ? 1 : 2; if (layer !== 1 || !rate || !bitrate || (sampleRate !== undefined && (sampleRate !== rate || channels !== currentChannels))) throw new ScenarioError('SOURCE_FORMAT', 'Inconsistent MP3 frames'); const samples = version === 3 ? 1152 : 576, length = Math.floor((version === 3 ? 144 : 72) * bitrate / rate + padding); if (length < 4 || o + length > bytes.length) throw new ScenarioError('SOURCE_FORMAT', 'Truncated MP3 frame'); sampleRate = rate; channels = currentChannels; duration += samples / rate; frames += 1; o += length; }
+  if (!frames || (o !== bytes.length && !(o + 128 === bytes.length && readText(bytes, o, 'TAG')))) throw new ScenarioError('SOURCE_FORMAT', 'Invalid MP3 trailing data'); return { mime: 'audio/mpeg', durationSeconds: duration };
+}

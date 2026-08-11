@@ -1,0 +1,1 @@
+module.exports = { packagerConfig: { asar: true, extraResource: ['../client/dist/desktop', '../../packages/core/assets/default-scenario.json', '../../assets/source'] }, makers: [{ name: '@electron-forge/maker-dmg', config: { format: 'ULFO' } }, { name: '@electron-forge/maker-zip', platforms: ['darwin'] }] };

@@ -1,0 +1,21 @@
+{
+  "name": "ambientalheehee",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {"node": ">=22 <23", "npm": ">=10"},
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=@ambiental/client",
+    "dev:desktop": "npm run dev --workspace=@ambiental/desktop",
+    "cli": "npm run cli --workspace=@ambiental/desktop --",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "build": "npm run generate:default:check && npm run build --workspaces --if-present",
+    "build:pages": "npm run generate:default:check && npm run build:web --workspace=@ambiental/client",
+    "package:mac:unsigned": "npm run package:mac:unsigned --workspace=@ambiental/desktop",
+    "make:mac:release": "npm run make:mac:release --workspace=@ambiental/desktop",
+    "generate:default": "node scripts/generate-default.mjs",
+    "generate:default:check": "node scripts/generate-default.mjs --check"
+  },
+  "devDependencies": {"@playwright/test": "^1.55.0", "@types/node": "^22.15.0", "typescript": "^5.8.3", "vite": "^6.3.5", "vitest": "^3.2.4"}
+}

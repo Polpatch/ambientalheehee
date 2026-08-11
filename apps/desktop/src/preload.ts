@@ -1,0 +1,2 @@
+import { contextBridge, ipcRenderer } from 'electron';
+contextBridge.exposeInMainWorld('ambiental', Object.freeze({ loadInitialScenario: () => ipcRenderer.invoke('ambiental:scenario'), chooseScenario: (text: string) => ipcRenderer.invoke('ambiental:choose', text), resolveSource: (index: number) => ipcRenderer.invoke('ambiental:resolve', index), quit: () => ipcRenderer.invoke('ambiental:quit') }));

@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+for APP in "$HERE/Ambientalheehee.app" "/Applications/Ambientalheehee.app"; do
+  if [ -x "$APP/Contents/MacOS/Ambientalheehee" ]; then
+    exec "$APP/Contents/MacOS/Ambientalheehee" --cli "$@"
+  fi
+done
+echo "Ambientalheehee.app was not found next to this launcher or in /Applications." >&2
+exit 2
