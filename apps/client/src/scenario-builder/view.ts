@@ -1,6 +1,7 @@
 import { inspectDataUri, inspectEmbeddedAudio, parseScenario } from '@ambiental/core';
 import type { ClientRuntime, MaterializationProgress, SourceOutputKind } from '../runtime.js';
 import { fileToEmbeddedDataUri } from './embedded-file.js';
+import { fileToEmbeddedImageDataUri } from './embedded-image.js';
 import {
   addBaseDraft,
   addJumperDraft,
@@ -223,6 +224,9 @@ export function mountScenarioBuilder(container: HTMLElement, { runtime, initialD
         <div class="destination-title"><label><input type="radio" name="destination" data-destination="jumper" value="${jumper.draftId}" ${selected ? 'checked' : ''}><span>Jumper</span></label><span class="count">${jumper.sources.length} crop</span></div>
         <label>ID<input data-jumper-id="${jumper.draftId}" value="${escape(jumper.id)}" ${error ? 'aria-invalid="true"' : ''}></label>
         <div class="schedule-grid"><label>Mean (s)<input data-jumper="mean" data-id="${jumper.draftId}" type="number" min=".01" step=".01" value="${escape(jumper.meanIntervalSeconds)}"></label><label>Deviation (s)<input data-jumper="stddev" data-id="${jumper.draftId}" type="number" min="0" step=".01" value="${escape(jumper.stddevSeconds)}"></label></div>
+        <div class="jumper-image-control">
+          ${jumper.imageDataUri ? `<img src="${escape(jumper.imageDataUri)}" alt="Visual di ${escape(jumper.id)}"><button type="button" data-action="remove-jumper-image" data-id="${jumper.draftId}">Rimuovi immagine</button>` : `<label>Visual Jumper<input data-jumper-image="${jumper.draftId}" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"><small>PNG, JPEG o WebP · massimo 8 MiB</small></label>`}
+        </div>
         <p class="algorithm">Algorithm · increasing_gaussian</p>
         ${jumper.sources.length ? `<ol class="assigned-list">${jumper.sources.map((source) => compactSource(source, 'jumper', jumper.draftId)).join('')}</ol>` : '<p class="empty-source">Nessun crop assegnato.</p>'}
         <p class="card-error" aria-live="polite">${escape(error)}</p>
@@ -661,6 +665,18 @@ export function mountScenarioBuilder(container: HTMLElement, { runtime, initialD
       refreshHeader();
     }
   }
+  async function setJumperImage(draftId: string, file: File) {
+    const jumper = draft.jumpers.find((item) => item.draftId === draftId);
+    if (!jumper) return;
+    try {
+      jumper.imageDataUri = await fileToEmbeddedImageDataUri(file);
+      delete validationErrors[draftId];
+    } catch (error) {
+      validationErrors[draftId] = error instanceof Error ? error.message : 'Impossibile incorporare l’immagine';
+    }
+    refreshManager();
+  }
+
 
   container.addEventListener('input', (event) => {
     const target = event.target;
@@ -690,6 +706,10 @@ export function mountScenarioBuilder(container: HTMLElement, { runtime, initialD
     const target = event.target;
     if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
     if (target instanceof HTMLInputElement && target.files?.[0] && target.dataset.action === 'load') { void loadDocument(target.files[0]); return; }
+    if (target instanceof HTMLInputElement && target.files?.[0] && target.dataset.jumperImage) {
+      void setJumperImage(target.dataset.jumperImage, target.files[0]);
+      return;
+    }
     if (target instanceof HTMLInputElement && target.files?.[0] && target.dataset.sourceFile !== undefined) {
       pendingFile = target.files[0];
       sourceStatus = '';
@@ -728,6 +748,7 @@ export function mountScenarioBuilder(container: HTMLElement, { runtime, initialD
     if (action === 'add-jumper') { const jumper = addJumperDraft(draft); draft.jumpers.push(jumper); selectedDestination = { kind: 'jumper', draftId: jumper.draftId }; validationErrors = {}; refreshManager(); syncWorkspaceControls(); return; }
     if (action === 'remove-base') { draft.bases = draft.bases.filter((item) => item.draftId !== button.dataset.id); if (selectedDestination?.kind === 'base' && selectedDestination.draftId === button.dataset.id) selectedDestination = undefined; refreshManager(); syncWorkspaceControls(); return; }
     if (action === 'remove-jumper') { draft.jumpers = draft.jumpers.filter((item) => item.draftId !== button.dataset.id); if (selectedDestination?.kind === 'jumper' && selectedDestination.draftId === button.dataset.id) selectedDestination = undefined; refreshManager(); syncWorkspaceControls(); return; }
+    if (action === 'remove-jumper-image') { const jumper = draft.jumpers.find((item) => item.draftId === button.dataset.id); if (jumper) jumper.imageDataUri = ''; refreshManager(); return; }
     if (action === 'remove-crop') {
       if (button.dataset.ownerKind === 'base') { const base = draft.bases.find((item) => item.draftId === button.dataset.ownerId); if (base && !isSourceDraftEmpty(base.source)) base.source = createSourceDraft(); }
       if (button.dataset.ownerKind === 'jumper') { const jumper = draft.jumpers.find((item) => item.draftId === button.dataset.ownerId); if (jumper) jumper.sources = jumper.sources.filter((source) => source.draftId !== button.dataset.sourceId); }

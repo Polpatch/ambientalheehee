@@ -19,7 +19,7 @@ export class FireworksScene {
   private frame = 0;
   private burstCount = 0;
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
+  constructor(private readonly canvas: HTMLCanvasElement, private readonly random: () => number = Math.random) {
     this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.setClearColor(0x000000, 0);
@@ -30,22 +30,22 @@ export class FireworksScene {
     this.frame = requestAnimationFrame(this.render);
   }
 
-  burst(seed = Math.random()) {
+  burst() {
     const count = this.reducedMotion ? 42 : 180;
     const positions = new Float32Array(count * 3);
     const velocities = new Float32Array(count * 3);
-    const origin = new THREE.Vector3((seed - 0.5) * 7, 0.4 + Math.random() * 2.7, (Math.random() - 0.5) * 1.5);
+    const origin = new THREE.Vector3((this.random() - 0.5) * 7, 0.4 + this.random() * 2.7, (this.random() - 0.5) * 1.5);
     for (let index = 0; index < count; index += 1) {
       const offset = index * 3;
       positions[offset] = origin.x;
       positions[offset + 1] = origin.y;
       positions[offset + 2] = origin.z;
       const direction = new THREE.Vector3(
-        Math.random() * 2 - 1,
-        Math.random() * 2 - 1,
-        Math.random() * 2 - 1,
+        this.random() * 2 - 1,
+        this.random() * 2 - 1,
+        this.random() * 2 - 1,
       ).normalize();
-      const speed = this.reducedMotion ? 0.25 : 1.1 + Math.random() * 2.5;
+      const speed = this.reducedMotion ? 0.25 : 1.1 + this.random() * 2.5;
       velocities[offset] = direction.x * speed;
       velocities[offset + 1] = direction.y * speed;
       velocities[offset + 2] = direction.z * speed;
@@ -65,6 +65,8 @@ export class FireworksScene {
     this.bursts.push({ points, velocities, age: 0, lifetime: this.reducedMotion ? 1.1 : 2.2 });
     this.burstCount += 1;
     this.canvas.dataset.bursts = String(this.burstCount);
+    const previousOrigins = this.canvas.dataset.burstOrigins ? this.canvas.dataset.burstOrigins.split(',') : [];
+    this.canvas.dataset.burstOrigins = [...previousOrigins.slice(-7), origin.x.toFixed(3)].join(',');
   }
 
   destroy() {
@@ -117,9 +119,9 @@ export class FireworksScene {
     const count = 420;
     const positions = new Float32Array(count * 3);
     for (let index = 0; index < count; index += 1) {
-      positions[index * 3] = (Math.random() - 0.5) * 20;
-      positions[index * 3 + 1] = (Math.random() - 0.5) * 12;
-      positions[index * 3 + 2] = -2 - Math.random() * 8;
+      positions[index * 3] = (this.random() - 0.5) * 20;
+      positions[index * 3 + 1] = (this.random() - 0.5) * 12;
+      positions[index * 3 + 2] = -2 - this.random() * 8;
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));

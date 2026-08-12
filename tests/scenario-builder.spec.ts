@@ -3,6 +3,9 @@ import { inspectDataUri, inspectEmbeddedAudio } from '../packages/core/src/index
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+const pngDataUri = `data:image/png;base64,${pngBase64}`;
+const pngBuffer = Buffer.from(pngBase64, 'base64');
 const chime = join(process.cwd(), 'assets/source/default-chime.wav');
 
 async function openBuilder(page: Page) {
@@ -38,6 +41,8 @@ test('reuses one prepared source for two crops and materializes web output', asy
   await openBuilder(page);
   await page.getByLabel('Scenario name').fill('Night walk');
   await page.getByRole('button', { name: 'Nuovo Jumper' }).click();
+  await page.locator('input[data-jumper-image]').setInputFiles({ name: 'birds.png', mimeType: 'image/png', buffer: pngBuffer });
+  await expect(page.locator('.jumper-image-control img')).toHaveAttribute('src', pngDataUri);
   await prepareChime(page);
 
   const audio = page.locator('.crop-region audio');
@@ -76,9 +81,10 @@ test('reuses one prepared source for two crops and materializes web output', asy
   expect(download.suggestedFilename()).toBe('night-walk.json');
   const path = await download.path();
   expect(path).toBeTruthy();
-  const document = JSON.parse(await readFile(path!, 'utf8')) as { jumpers: Array<{ sources: Array<{ location: string; clip?: unknown }> }> };
+  const document = JSON.parse(await readFile(path!, 'utf8')) as { jumpers: Array<{ image?: string; sources: Array<{ location: string; clip?: unknown }> }> };
   expect(document.jumpers).toHaveLength(1);
   expect(document.jumpers[0]!.sources).toHaveLength(2);
+  expect(document.jumpers[0]!.image).toBe(pngDataUri);
   const sources = document.jumpers[0]!.sources;
   expect(sources[0]!.location).not.toBe(sources[1]!.location);
   expect(sources.every((source) => !Object.hasOwn(source, 'clip'))).toBe(true);

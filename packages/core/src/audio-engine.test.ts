@@ -10,6 +10,7 @@ class FakeAudioElement extends EventTarget {
   webkitPreservesPitch = true;
   busy = false;
   currentTime = 0;
+  readyState = 4;
   duration = 10;
   volume = 1;
   playbackRate = 1;
@@ -50,13 +51,36 @@ describe('MediaElementAudioEngine', () => {
     const item = source('jumper.wav');
     const media = resolved(item.location, () => { releases += 1; });
 
-    expect(await engine.trigger(item, media, 1)).toBe(true);
+    let endings = 0;
+    expect(await engine.trigger(item, media, 1, { ended: () => { endings += 1; } })).toBe(true);
     const voice = elements[0]!;
     voice.dispatchEvent(new Event('ended'));
-    expect(await engine.trigger(item, media, 1)).toBe(true);
+    expect(endings).toBe(1);
+    expect(await engine.trigger(item, media, 1, { ended: () => { endings += 1; } })).toBe(true);
 
     expect(releases).toBe(0);
     expect(voice.playCount).toBe(3);
+  });
+
+  it('stops a clipped Jumper and reports completion at its crop end', async () => {
+    const elements: FakeAudioElement[] = [];
+    const engine = new MediaElementAudioEngine(() => {
+      const element = new FakeAudioElement();
+      elements.push(element);
+      return element as unknown as HTMLAudioElement;
+    });
+    await engine.authorize(0);
+    const item = source('clip.wav', { start_seconds: 2, end_seconds: 4 });
+    let endings = 0;
+    await engine.trigger(item, resolved(item.location, () => {}), 1, { ended: () => { endings += 1; } });
+    const voice = elements[0]!;
+    voice.currentTime = 4;
+    voice.dispatchEvent(new Event('timeupdate'));
+
+    expect(voice.paused).toBe(true);
+    expect(endings).toBe(1);
+    voice.dispatchEvent(new Event('ended'));
+    expect(endings).toBe(1);
   });
 
   it('loops a full Base and restarts a clipped Base at its crop start', async () => {

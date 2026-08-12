@@ -4,6 +4,10 @@ import type { Source } from './schema.js';
 export const MAX_JUMPER_VOICES = 32;
 export const ALLOWED_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 export type AudioRate = typeof ALLOWED_RATES[number];
+export interface JumperPlaybackLifecycle {
+  beforeStart?(): boolean | Promise<boolean>;
+  ended?(): void;
+}
 
 type Voice = {
   element: HTMLAudioElement;
@@ -44,11 +48,10 @@ export class MediaElementAudioEngine {
     await this.play(voice, source, resolved, volume, true);
   }
 
-  async trigger(source: Source, resolved: ResolvedSource, volume: number): Promise<boolean> {
+  async trigger(source: Source, resolved: ResolvedSource, volume: number, lifecycle: JumperPlaybackLifecycle = {}): Promise<boolean> {
     const voice = this.jumpers.find((candidate) => !candidate.busy);
     if (!voice) return false;
-    await this.play(voice, source, resolved, volume, false);
-    return true;
+    return this.play(voice, source, resolved, volume, false, lifecycle);
   }
 
   async setRate(rate: AudioRate): Promise<void> {
@@ -89,7 +92,7 @@ export class MediaElementAudioEngine {
     }
   }
 
-  private async play(voice: Voice, source: Source, resolved: ResolvedSource, volume: number, base: boolean) {
+  private async play(voice: Voice, source: Source, resolved: ResolvedSource, volume: number, base: boolean, lifecycle: JumperPlaybackLifecycle = {}) {
     voice.cleanup?.();
     voice.cleanup = undefined;
     voice.busy = true;
@@ -101,10 +104,13 @@ export class MediaElementAudioEngine {
     element.playbackRate = this.rate;
     element.currentTime = start;
     element.loop = base && end === undefined;
+    let cancelReadiness: (() => void) | undefined;
 
     const cleanup = () => {
       element.removeEventListener('timeupdate', monitor);
       element.removeEventListener('ended', ended);
+      cancelReadiness?.();
+      cancelReadiness = undefined;
       voice.cleanup = undefined;
     };
     const finish = () => {
@@ -113,8 +119,10 @@ export class MediaElementAudioEngine {
         void element.play();
         return;
       }
+      element.pause();
       voice.busy = false;
       cleanup();
+      lifecycle.ended?.();
     };
     const monitor = () => {
       if (end !== undefined && element.currentTime >= end - 0.02) finish();
@@ -124,8 +132,35 @@ export class MediaElementAudioEngine {
     element.addEventListener('timeupdate', monitor);
     element.addEventListener('ended', ended);
     voice.cleanup = cleanup;
+    if (!base && element.readyState < 3) {
+      const ready = await new Promise<boolean>((resolve) => {
+        const settle = (value: boolean) => {
+          element.removeEventListener('canplay', onReady);
+          element.removeEventListener('error', onError);
+          cancelReadiness = undefined;
+          resolve(value);
+        };
+        const onReady = () => settle(true);
+        const onError = () => settle(false);
+        cancelReadiness = () => settle(false);
+        element.addEventListener('canplay', onReady, { once: true });
+        element.addEventListener('error', onError, { once: true });
+        element.load();
+      });
+      if (!ready || voice.cleanup !== cleanup) {
+        voice.busy = false;
+        cleanup();
+        return false;
+      }
+    }
+    if (lifecycle.beforeStart && !await lifecycle.beforeStart()) {
+      voice.busy = false;
+      cleanup();
+      return false;
+    }
     try {
       await element.play();
+      return true;
     } catch (error) {
       voice.busy = false;
       cleanup();

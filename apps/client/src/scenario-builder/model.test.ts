@@ -19,6 +19,7 @@ import {
 } from './model.js';
 
 const wav = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 const embedded = () => { const source = createSourceDraft(); source.embeddedLocation = wav; return source; };
 const youtube = () => { const source = createSourceDraft(); source.kind = 'youtube'; source.youtubeUrl = 'https://youtu.be/example'; return source; };
 
@@ -104,5 +105,14 @@ describe('scenario draft model', () => {
     expect(Object.hasOwn(candidate, 'audio_root')).toBe(false);
     expect(Object.hasOwn(candidate.bases?.[0]!.source ?? {}, 'clip')).toBe(false);
     expect(Object.hasOwn(candidate.bases?.[0]!.source ?? {}, 'volume')).toBe(false);
+  });
+
+  it('round-trips an optional embedded Jumper image', () => {
+    const document = { version: 1 as const, name: 'Night', bases: [], jumpers: [{ id: 'birds', image: png, sources: [{ location: wav }], schedule: { algorithm: 'increasing_gaussian' as const, mean_interval_seconds: 4, stddev_seconds: 1 } }] };
+    const draft = scenarioDocumentToDraft(document, parseScenario(JSON.stringify(document), 'web'));
+    expect(draft.jumpers[0]?.imageDataUri).toBe(png);
+    expect(buildScenarioCandidate(draft).jumpers?.[0]?.image).toBe(png);
+    draft.jumpers[0]!.imageDataUri = '';
+    expect(Object.hasOwn(buildScenarioCandidate(draft).jumpers?.[0] ?? {}, 'image')).toBe(false);
   });
 });
