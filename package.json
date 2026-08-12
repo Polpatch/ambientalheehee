@@ -5,7 +5,7 @@
   "engines": {"node": ">=22 <23", "npm": ">=10"},
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
-    "dev:web": "npm run dev --workspace=@ambiental/client",
+    "dev:web": "npm run build --workspace=@ambiental/core && npm run dev --workspace=@ambiental/client --",
     "dev:desktop": "npm run dev --workspace=@ambiental/desktop",
     "cli": "npm run cli --workspace=@ambiental/desktop --",
     "test": "vitest run",

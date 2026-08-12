@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# TypeScript and Vite build output
+*.tsbuildinfo
+apps/*/dist/
+packages/*/dist/
+dist/
+out/
+
+# Electron Forge packaging output
+out/
+release/
+*.dmg
+*.zip
+*.app
+
+# Tests and browser artifacts
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# Runtime logs and temporary media
+*.log
+logs/
+.tmp/
+tmp/
+ambiental-*/
+
+# Environment and credentials
+.env
+.env.*
+!.env.example
+
+# Editor and operating system files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Graphify local runtime artifacts
+graphify-out/

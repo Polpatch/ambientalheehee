@@ -1,0 +1,8 @@
+import { inspectDataUri, inspectEmbeddedAudio } from '@ambiental/core';
+
+const MAX_BYTES = 16 * 1024 * 1024;
+type Mime = 'audio/wav' | 'audio/mpeg';
+const mimeForExtension = (name: string): Mime | undefined => name.toLowerCase().endsWith('.wav') ? 'audio/wav' : name.toLowerCase().endsWith('.mp3') ? 'audio/mpeg' : undefined;
+const normalizeMime = (mime: string): Mime | undefined => mime === 'audio/wav' || mime === 'audio/x-wav' ? 'audio/wav' : mime === 'audio/mpeg' || mime === 'audio/mp3' ? 'audio/mpeg' : undefined;
+function encodeBase64(bytes: Uint8Array): string { let binary = ''; const chunkSize = 0x8000; for (let offset = 0; offset < bytes.length; offset += chunkSize) { const chunk = bytes.subarray(offset, offset + chunkSize); for (const byte of chunk) binary += String.fromCharCode(byte); } return btoa(binary); }
+export async function fileToEmbeddedDataUri(file: File): Promise<{ location: string; mime: Mime; durationSeconds: number }> { if (file.size > MAX_BYTES) throw new Error('Embedded source exceeds 16 MiB'); const extensionMime = mimeForExtension(file.name); const fileMime = normalizeMime(file.type); if (!extensionMime && !fileMime) throw new Error('Choose a WAV or MP3 file'); if (extensionMime && fileMime && extensionMime !== fileMime) throw new Error('File MIME and extension disagree'); const mime = fileMime ?? extensionMime!; const bytes = new Uint8Array(await file.arrayBuffer()); const inspection = inspectEmbeddedAudio(bytes, mime); const location = `data:${mime};base64,${encodeBase64(bytes)}`; inspectDataUri(location); return { location, mime, durationSeconds: inspection.durationSeconds }; }

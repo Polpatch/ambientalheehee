@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { addEmbeddedBytes } from './embedded-budget.js';
 
 export type RuntimePolicy = 'web' | 'desktop';
 export type ScenarioErrorCode = 'JSON_SIZE' | 'JSON_SYNTAX' | 'SCHEMA' | 'POLICY' | 'SOURCE_SIZE' | 'SOURCE_FORMAT' | 'SOURCE_UNAVAILABLE' | 'TOOL_MISSING' | 'METADATA' | 'CLIP_RANGE' | 'PLAYBACK';
@@ -16,7 +17,7 @@ export const ScenarioConfig = z.object({ version: z.literal(1), name: trimmed, a
   const seen = new Set<string>();
   [...value.bases, ...value.jumpers].forEach((entry, i) => { if (seen.has(entry.id)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `duplicate id: ${entry.id}`, path: [i < value.bases.length ? 'bases' : 'jumpers', i < value.bases.length ? i : i - value.bases.length, 'id'] }); seen.add(entry.id); });
 });
-export type Scenario = z.output<typeof ScenarioConfig>; export type Source = z.output<typeof SourceConfig>;
+export type Scenario = z.output<typeof ScenarioConfig>; export type Source = z.output<typeof SourceConfig>; export type ScenarioInput = z.input<typeof ScenarioConfig>; export type SourceInput = z.input<typeof SourceConfig>;
 const dataUri = /^data:audio\/(wav|mpeg);base64,([A-Za-z0-9+/]*={0,2})$/;
 export function inspectDataUri(value: string): { mime: 'audio/wav' | 'audio/mpeg'; bytes: Uint8Array } {
   const match = dataUri.exec(value); if (!match || (match[2]!.length % 4 !== 0) || /=/.test(match[2]!.slice(0, -2))) throw new ScenarioError('SOURCE_FORMAT', 'Expected canonical audio Data URI');
@@ -30,7 +31,18 @@ export function parseScenario(input: string, policy: RuntimePolicy): Scenario {
   if (new TextEncoder().encode(input).byteLength > 90 * 1024 * 1024) throw new ScenarioError('JSON_SIZE', 'Scenario exceeds 90 MiB');
   let parsed: unknown; try { parsed = JSON.parse(input); } catch { throw new ScenarioError('JSON_SYNTAX', 'Invalid JSON'); }
   const result = ScenarioConfig.safeParse(parsed); if (!result.success) throw new ScenarioError('SCHEMA', result.error.issues[0]?.message ?? 'Invalid scenario', result.error.issues[0]?.path.join('/'));
-  for (const [pointer, source] of sources(result.data)) { if (!allowed(source.location, policy)) throw new ScenarioError('POLICY', `Source not allowed in ${policy}`, pointer); if (source.location.startsWith('data:')) inspectDataUri(source.location); }
+  let totalEmbeddedBytes = 0;
+  for (const [pointer, source] of sources(result.data)) {
+    if (!allowed(source.location, policy)) throw new ScenarioError('POLICY', `Source not allowed in ${policy}`, pointer);
+    if (source.location.startsWith('data:')) {
+      try {
+        totalEmbeddedBytes = addEmbeddedBytes(totalEmbeddedBytes, inspectDataUri(source.location).bytes.byteLength, pointer);
+      } catch (error) {
+        if (error instanceof ScenarioError) throw new ScenarioError(error.code, error.message, error.pointer ?? pointer);
+        throw error;
+      }
+    }
+  }
   return Object.freeze(result.data);
 }
 export function* sources(scenario: Scenario): Generator<[string, Source]> { for (const [i, base] of scenario.bases.entries()) yield [`bases/${i}/source`, base.source]; for (const [i, jumper] of scenario.jumpers.entries()) for (const [j, source] of jumper.sources.entries()) yield [`jumpers/${i}/sources/${j}`, source]; }
