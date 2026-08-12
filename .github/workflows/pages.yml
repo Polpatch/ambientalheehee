@@ -1,23 +1,69 @@
-name: Pages
-on: { push: { branches: [main] }, workflow_dispatch: {} }
-permissions: { contents: read, pages: write, id-token: write }
-concurrency: { group: pages, cancel-in-progress: true }
+name: Deploy web to GitHub Pages
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
 jobs:
-  deploy:
-    environment: { name: github-pages, url: '${{ steps.deployment.outputs.page_url }}' }
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm test
-      - run: npm run test:e2e -- --project=chromium
-      - run: npm run build:pages
-      - run: test $(du -sk apps/client/dist/web | cut -f1) -le 25600
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
-        with: { path: apps/client/dist/web }
-      - id: deployment
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Run browser tests
+        run: npm run test:e2e -- --project=chromium
+
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Build web application
+        run: npm run build:pages
+        env:
+          VITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+
+      - name: Enforce Pages artifact size
+        run: test $(du -sk apps/client/dist/web | cut -f1) -le 25600
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: apps/client/dist/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4

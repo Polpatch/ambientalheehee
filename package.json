@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "build": "npm run generate:default:check && npm run build --workspaces --if-present",
-    "build:pages": "npm run generate:default:check && npm run build:web --workspace=@ambiental/client",
+    "build:pages": "npm run build --workspace=@ambiental/core && npm run build:web --workspace=@ambiental/client",
     "package:mac:unsigned": "npm run package:mac:unsigned --workspace=@ambiental/desktop",
     "make:mac:release": "npm run make:mac:release --workspace=@ambiental/desktop",
     "generate:default": "node scripts/generate-default.mjs",
